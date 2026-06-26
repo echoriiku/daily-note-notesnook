@@ -13,7 +13,7 @@ jobs:
       - name: Gerar conteúdo e enviar para o Notesnook
         env:
           # Dica: Guarde seu token no menu Settings > Secrets and variables > Actions do repositório
-          NOTESNOOK_TOKEN: ${{ secrets.NOTESNOOK_TOKEN }} 
+          NOTESNOOK_TOKEN: ${{ secrets.NOTESNOOK_INBOX_API_KEY }} 
         run: |
           # Força o fuso horário de Fortaleza para gerar a data correta
           export TZ="America/Fortaleza"
