@@ -1,43 +1,100 @@
-name: Diário Automático
+name: 📓 Nota Diária no Notesnook
 
 on:
   schedule:
-    # 6:00 AM em America/Fortaleza (UTC-3) equivale a 9:00 AM em UTC
-    - cron: '0 9 * * *'
-  workflow_dispatch: # Permite que você rode manualmente pelo painel do GitHub para testar
+    # 7:00 AM BRT (America/Fortaleza) = 10:00 UTC
+    # Fortaleza não adota horário de verão, então é sempre UTC-3
+    - cron: "0 10 * * *"
+
+  # Permite executar manualmente pela aba Actions do GitHub
+  workflow_dispatch:
 
 jobs:
-  enviar-nota:
+  send-daily-note:
+    name: Enviar Nota Diária
     runs-on: ubuntu-latest
+
     steps:
-      - name: Gerar conteúdo e enviar para o Notesnook
-        env:
-          # Dica: Guarde seu token no menu Settings > Secrets and variables > Actions do repositório
-          NOTESNOOK_TOKEN: ${{ secrets.NOTESNOOK_INBOX_API_KEY }} 
+      - name: 📅 Preparar conteúdo da nota
+        id: note
         run: |
-          # Força o fuso horário de Fortaleza para gerar a data correta
-          export TZ="America/Fortaleza"
+          # Data atual no fuso de Fortaleza (UTC-3)
+          DATE=$(TZ="America/Fortaleza" date "+%d de %B de %Y")
+          WEEKDAY=$(TZ="America/Fortaleza" date "+%A")
 
-          # Arrays para traduzir a data para português nativo
-          DOWS=("Domingo" "Segunda-feira" "Terça-feira" "Quarta-feira" "Quinta-feira" "Sexta-feira" "Sábado")
-          MONTHS=("janeiro" "fevereiro" "março" "abril" "maio" "junho" "julho" "agosto" "setembro" "outubro" "novembro" "dezembro")
+          # Traduzir dia da semana para português
+          case "$WEEKDAY" in
+            Monday)    WEEKDAY_PT="Segunda-feira" ;;
+            Tuesday)   WEEKDAY_PT="Terça-feira"   ;;
+            Wednesday) WEEKDAY_PT="Quarta-feira"  ;;
+            Thursday)  WEEKDAY_PT="Quinta-feira"  ;;
+            Friday)    WEEKDAY_PT="Sexta-feira"   ;;
+            Saturday)  WEEKDAY_PT="Sábado"        ;;
+            Sunday)    WEEKDAY_PT="Domingo"       ;;
+            *)         WEEKDAY_PT="$WEEKDAY"      ;;
+          esac
 
-          DOW_INDEX=$(date +%w)
-          DAY=$(date +%d)
-          MONTH_INDEX=$(( $(date +%m) - 1 ))
-          YEAR=$(date +%Y)
+          # Traduzir mês para português
+          MONTH=$(TZ="America/Fortaleza" date "+%B")
+          case "$MONTH" in
+            January)   MONTH_PT="janeiro"   ;;
+            February)  MONTH_PT="fevereiro" ;;
+            March)     MONTH_PT="março"     ;;
+            April)     MONTH_PT="abril"     ;;
+            May)       MONTH_PT="maio"      ;;
+            June)      MONTH_PT="junho"     ;;
+            July)      MONTH_PT="julho"     ;;
+            August)    MONTH_PT="agosto"    ;;
+            September) MONTH_PT="setembro"  ;;
+            October)   MONTH_PT="outubro"   ;;
+            November)  MONTH_PT="novembro"  ;;
+            December)  MONTH_PT="dezembro"  ;;
+            *)         MONTH_PT="$MONTH"    ;;
+          esac
 
-          # Monta o título dinâmico (Ex: Sexta-feira, 26 de junho de 2026)
-          TITLE="${DOWS[$DOW_INDEX]}, $DAY de ${MONTHS[$MONTH_INDEX]} de $YEAR"
+          DAY=$(TZ="America/Fortaleza" date "+%d")
+          YEAR=$(TZ="America/Fortaleza" date "+%Y")
+          DATE_PT="${DAY} de ${MONTH_PT} de ${YEAR}"
 
-          # O segredo aqui foi escapar as aspas internas usando \" para não quebrar o Bash
-          CONTENT="<h1>📓 ${DOWS[$DOW_INDEX]}</h1><p><strong>$DAY de ${MONTHS[$MONTH_INDEX]} de $YEAR</strong></p><hr><p>🔍 <em>Examine a sua própria trajetória.</em> Se você fosse um observador externo da sua vida, o que veria agora? (Reflexão #178)</p><h2>Faísca criativa 💡</h2><p>Se a minha mente fosse um quarto, como ela estaria arrumada hoje?</p><p><br></p><h2>O que está indo bem?</h2><p>O que me dá energia e como posso acessar isso mais tarde?</p><p><br></p><hr><p><em>\"A vida não examinada não vale a pena ser vivida.\" — Sócrates</em></p>"
+          # Escolher um prompt aleatório para variar o conteúdo da nota
+          PROMPTS=(
+            "<p>☀️ <em>Bom dia.</em> Uma nova página em branco espera por você — sem julgamentos, sem pressão. Pode ser uma linha só. Pode ser um rabisco de ideia. O que está rolando pela sua cabeça agora?</p><h2>Comece aqui 👇</h2><p><br></p><h2>Reflexão do dia</h2><p>Uma coisa que quero lembrar amanhã:</p><p><br></p><h2>Algo que aprendi ou percebi</h2><p><br></p>"
+            "<p>📝 <em>Você abriu esse app por alguma razão.</em> Escrever é só conversar com você mesmo — sem filtro, sem autocorreção emocional. O que está ocupando espaço na sua cabeça hoje?</p><h2>Despejo mental 🧠</h2><p><br></p><h2>O que está indo bem?</h2><p><br></p><h2>O que pode melhorar?</h2><p><br></p>"
+            "<p>🌊 <em>Três minutos. Só isso.</em> Abra o teclado e deixa fluir — sem apagar, sem reescrever. Pensamento cru, direto.</p><h2>Escreva livremente 🖊️</h2><p><br></p><h2>Uma palavra que define seu dia até agora</h2><p><br></p><h2>Uma coisa que você quer fazer antes de dormir</h2><p><br></p>"
+            "<p>💡 <em>Ideias não documentadas são ideias perdidas.</em> Que faísca passou pela sua mente nos últimos dias e você não anotou? Hora de resgatar.</p><h2>Ideias soltas 💭</h2><p><br></p><h2>Projeto ou plano que quero avançar</h2><p><br></p><h2>Uma pergunta que me intriga ultimamente</h2><p><br></p>"
+            "<p>🔥 <em>Ontem já foi, amanhã é incerto — mas agora você está aqui.</em> O que está acontecendo de verdade na sua vida? Não o que você posta, o que você realmente sente.</p><h2>Honestidade radical ✍️</h2><p><br></p><h2>O que estou evitando pensar?</h2><p><br></p><h2>O que me deixaria orgulhoso(a) daqui a uma semana?</h2><p><br></p>"
+            "<p>🗺️ <em>Todo grande projeto começa numa anotação bagunçada.</em> O que você está construindo — ou querendo construir — que ainda não saiu do papel?</p><h2>Construindo algo 🏗️</h2><p><br></p><h2>Próximos passos concretos</h2><p><br></p><h2>O que me trava?</h2><p><br></p>"
+            "<p>🌱 <em>Crescimento não aparece nos espelhos, aparece nas anotações.</em> Compare você de hoje com você de seis meses atrás. O que mudou?</p><h2>Evolução pessoal 📈</h2><p><br></p><h2>Hábito que estou tentando criar ou largar</h2><p><br></p><h2>Uma coisa que aprendi sobre mim mesmo(a) recentemente</h2><p><br></p>"
+          )
 
-          # Envia o JSON para a Inbox API do Notesnook de forma segura usando o jq
+          # Índice baseado no dia do ano para variar semanalmente
+          DAY_OF_YEAR=$(TZ="America/Fortaleza" date "+%j")
+          INDEX=$((DAY_OF_YEAR % ${#PROMPTS[@]}))
+          CHOSEN_PROMPT="${PROMPTS[$INDEX]}"
+
+          # Montar o HTML completo da nota
+          NOTE_TITLE="${WEEKDAY_PT}, ${DATE_PT}"
+
+          NOTE_CONTENT="<h1>📓 ${WEEKDAY_PT}</h1><p><strong>${DATE_PT}</strong></p><hr>${CHOSEN_PROMPT}<hr><p><em>\"A vida não examinada não vale a pena ser vivida.\" — Sócrates</em></p>"
+
+          # Exportar para uso no próximo step
+          echo "title=${NOTE_TITLE}" >> "$GITHUB_OUTPUT"
+
+          # Usar delimitador para conteúdo multiline
+          echo "content<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTE_CONTENT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: 📬 Enviar nota para o Notesnook
+        run: |
+          TITLE="${{ steps.note.outputs.title }}"
+          CONTENT="${{ steps.note.outputs.content }}"
+
+          # Montar o JSON e enviar para a Inbox API
           HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
             -X POST https://inbox.notesnook.com/ \
             -H "Content-Type: application/json" \
-            -H "Authorization: $NOTESNOOK_TOKEN" \
+            -H "Authorization: ${{ secrets.NOTESNOOK_INBOX_API_KEY }}" \
             -d "$(jq -n \
               --arg title "$TITLE" \
               --arg content "$CONTENT" \
@@ -50,7 +107,8 @@ jobs:
                   type: "html",
                   data: $content
                 }
-              }')")
+              }'
+            )")
 
           echo "Status HTTP: $HTTP_STATUS"
           echo "Resposta: $(cat /tmp/response.json)"
