@@ -16,9 +16,16 @@ jobs:
         run: |
           export TZ="America/Fortaleza"
 
-          # Busca o resumo de um artigo aleatório na Wikipédia em PT
-          RESPONSE=$(curl -s https://pt.wikipedia.org/api/rest_v1/page/random/summary)
+          # Adicionado o User-Agent para a Wikipédia não bloquear a requisição
+          RESPONSE=$(curl -s -H "User-Agent: NotesnookBot/1.0 (GitHub Actions Automation)" https://pt.wikipedia.org/api/rest_v1/page/random/summary)
           
+          # Valida se o retorno é realmente um JSON válido antes de passar para o jq
+          if ! echo "$RESPONSE" | jq empty 2>/dev/null; then
+            echo "❌ Erro: A Wikipédia não retornou um JSON válido. Resposta recebida:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
           WIKI_TITLE=$(echo "$RESPONSE" | jq -r '.title')
           WIKI_EXTRACT=$(echo "$RESPONSE" | jq -r '.extract')
           WIKI_URL=$(echo "$RESPONSE" | jq -r '.content_urls.desktop.page')
@@ -45,6 +52,6 @@ jobs:
           if [ "$HTTP_STATUS" -eq 200 ]; then
             echo "✅ Artigo enviado com sucesso!"
           else
-            echo "❌ Erro ao enviar. Status: $HTTP_STATUS"
+            echo "❌ Erro ao enviar para o Notesnook. Status: $HTTP_STATUS"
             exit 1
           fi
