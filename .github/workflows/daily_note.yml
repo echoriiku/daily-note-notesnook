@@ -4,7 +4,7 @@ on:
   schedule:
     # 7:00 AM BRT (America/Fortaleza) = 10:00 UTC
     # Fortaleza não adota horário de verão, então é sempre UTC-3
-    - cron: "0 10 * * *"
+    - cron: "0 9 * * *"
 
   # Permite executar manualmente pela aba Actions do GitHub
   workflow_dispatch:
@@ -15,106 +15,118 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📅 Preparar conteúdo da nota
-        id: note
+      - name: 📅 Gerar payload da nota (via Python)
         run: |
-          # Data atual no fuso de Fortaleza (UTC-3)
-          DATE=$(TZ="America/Fortaleza" date "+%d de %B de %Y")
-          WEEKDAY=$(TZ="America/Fortaleza" date "+%A")
+          python3 << 'PYEOF'
+          import json, os, datetime, zoneinfo
 
-          # Traduzir dia da semana para português
-          case "$WEEKDAY" in
-            Monday)    WEEKDAY_PT="Segunda-feira" ;;
-            Tuesday)   WEEKDAY_PT="Terça-feira"   ;;
-            Wednesday) WEEKDAY_PT="Quarta-feira"  ;;
-            Thursday)  WEEKDAY_PT="Quinta-feira"  ;;
-            Friday)    WEEKDAY_PT="Sexta-feira"   ;;
-            Saturday)  WEEKDAY_PT="Sábado"        ;;
-            Sunday)    WEEKDAY_PT="Domingo"       ;;
-            *)         WEEKDAY_PT="$WEEKDAY"      ;;
-          esac
+          tz = zoneinfo.ZoneInfo("America/Fortaleza")
+          now = datetime.datetime.now(tz)
 
-          # Traduzir mês para português
-          MONTH=$(TZ="America/Fortaleza" date "+%B")
-          case "$MONTH" in
-            January)   MONTH_PT="janeiro"   ;;
-            February)  MONTH_PT="fevereiro" ;;
-            March)     MONTH_PT="março"     ;;
-            April)     MONTH_PT="abril"     ;;
-            May)       MONTH_PT="maio"      ;;
-            June)      MONTH_PT="junho"     ;;
-            July)      MONTH_PT="julho"     ;;
-            August)    MONTH_PT="agosto"    ;;
-            September) MONTH_PT="setembro"  ;;
-            October)   MONTH_PT="outubro"   ;;
-            November)  MONTH_PT="novembro"  ;;
-            December)  MONTH_PT="dezembro"  ;;
-            *)         MONTH_PT="$MONTH"    ;;
-          esac
+          WEEKDAYS = ["Segunda-feira","Terça-feira","Quarta-feira",
+                      "Quinta-feira","Sexta-feira","Sábado","Domingo"]
+          MONTHS   = ["janeiro","fevereiro","março","abril","maio","junho",
+                      "julho","agosto","setembro","outubro","novembro","dezembro"]
 
-          DAY=$(TZ="America/Fortaleza" date "+%d")
-          YEAR=$(TZ="America/Fortaleza" date "+%Y")
-          DATE_PT="${DAY} de ${MONTH_PT} de ${YEAR}"
+          weekday  = WEEKDAYS[now.weekday()]
+          date_str = f"{now.day} de {MONTHS[now.month - 1]} de {now.year}"
+          title    = f"{weekday}, {date_str}"
 
-          # Escolher um prompt aleatório para variar o conteúdo da nota
-          PROMPTS=(
-            "<p>☀️ <em>Bom dia.</em> Uma nova página em branco espera por você — sem julgamentos, sem pressão. Pode ser uma linha só. Pode ser um rabisco de ideia. O que está rolando pela sua cabeça agora?</p><h2>Comece aqui 👇</h2><p><br></p><h2>Reflexão do dia</h2><p>Uma coisa que quero lembrar amanhã:</p><p><br></p><h2>Algo que aprendi ou percebi</h2><p><br></p>"
-            "<p>📝 <em>Você abriu esse app por alguma razão.</em> Escrever é só conversar com você mesmo — sem filtro, sem autocorreção emocional. O que está ocupando espaço na sua cabeça hoje?</p><h2>Despejo mental 🧠</h2><p><br></p><h2>O que está indo bem?</h2><p><br></p><h2>O que pode melhorar?</h2><p><br></p>"
-            "<p>🌊 <em>Três minutos. Só isso.</em> Abra o teclado e deixa fluir — sem apagar, sem reescrever. Pensamento cru, direto.</p><h2>Escreva livremente 🖊️</h2><p><br></p><h2>Uma palavra que define seu dia até agora</h2><p><br></p><h2>Uma coisa que você quer fazer antes de dormir</h2><p><br></p>"
-            "<p>💡 <em>Ideias não documentadas são ideias perdidas.</em> Que faísca passou pela sua mente nos últimos dias e você não anotou? Hora de resgatar.</p><h2>Ideias soltas 💭</h2><p><br></p><h2>Projeto ou plano que quero avançar</h2><p><br></p><h2>Uma pergunta que me intriga ultimamente</h2><p><br></p>"
-            "<p>🔥 <em>Ontem já foi, amanhã é incerto — mas agora você está aqui.</em> O que está acontecendo de verdade na sua vida? Não o que você posta, o que você realmente sente.</p><h2>Honestidade radical ✍️</h2><p><br></p><h2>O que estou evitando pensar?</h2><p><br></p><h2>O que me deixaria orgulhoso(a) daqui a uma semana?</h2><p><br></p>"
-            "<p>🗺️ <em>Todo grande projeto começa numa anotação bagunçada.</em> O que você está construindo — ou querendo construir — que ainda não saiu do papel?</p><h2>Construindo algo 🏗️</h2><p><br></p><h2>Próximos passos concretos</h2><p><br></p><h2>O que me trava?</h2><p><br></p>"
-            "<p>🌱 <em>Crescimento não aparece nos espelhos, aparece nas anotações.</em> Compare você de hoje com você de seis meses atrás. O que mudou?</p><h2>Evolução pessoal 📈</h2><p><br></p><h2>Hábito que estou tentando criar ou largar</h2><p><br></p><h2>Uma coisa que aprendi sobre mim mesmo(a) recentemente</h2><p><br></p>"
+          PROMPTS = [
+              # 0 – Segunda
+              f"""<p>☀️ <em>Bom dia.</em> Uma nova página em branco espera por você — sem julgamentos, sem pressão.
+Pode ser uma linha só. Pode ser um rabisco de ideia. O que está rolando pela sua cabeça agora?</p>
+<h2>Comece aqui 👇</h2><p><br></p>
+<h2>Reflexão do dia</h2><p>Uma coisa que quero lembrar amanhã:</p><p><br></p>
+<h2>Algo que aprendi ou percebi</h2><p><br></p>""",
+
+              # 1 – Terça
+              f"""<p>📝 <em>Você abriu esse app por alguma razão.</em> Escrever é só conversar com você mesmo —
+sem filtro, sem autocorreção emocional. O que está ocupando espaço na sua cabeça hoje?</p>
+<h2>Despejo mental 🧠</h2><p><br></p>
+<h2>O que está indo bem?</h2><p><br></p>
+<h2>O que pode melhorar?</h2><p><br></p>""",
+
+              # 2 – Quarta
+              f"""<p>🌊 <em>Três minutos. Só isso.</em> Abra o teclado e deixa fluir — sem apagar, sem reescrever.
+Pensamento cru, direto.</p>
+<h2>Escreva livremente 🖊️</h2><p><br></p>
+<h2>Uma palavra que define seu dia até agora</h2><p><br></p>
+<h2>Uma coisa que você quer fazer antes de dormir</h2><p><br></p>""",
+
+              # 3 – Quinta
+              f"""<p>💡 <em>Ideias não documentadas são ideias perdidas.</em> Que faísca passou pela sua mente
+nos últimos dias e você não anotou? Hora de resgatar.</p>
+<h2>Ideias soltas 💭</h2><p><br></p>
+<h2>Projeto ou plano que quero avançar</h2><p><br></p>
+<h2>Uma pergunta que me intriga ultimamente</h2><p><br></p>""",
+
+              # 4 – Sexta
+              f"""<p>🔥 <em>Ontem já foi, amanhã é incerto — mas agora você está aqui.</em> O que está acontecendo
+de verdade na sua vida? Não o que você posta, o que você realmente sente.</p>
+<h2>Honestidade radical ✍️</h2><p><br></p>
+<h2>O que estou evitando pensar?</h2><p><br></p>
+<h2>O que me deixaria orgulhoso(a) daqui a uma semana?</h2><p><br></p>""",
+
+              # 5 – Sábado
+              f"""<p>🗺️ <em>Todo grande projeto começa numa anotação bagunçada.</em> O que você está construindo —
+ou querendo construir — que ainda não saiu do papel?</p>
+<h2>Construindo algo 🏗️</h2><p><br></p>
+<h2>Próximos passos concretos</h2><p><br></p>
+<h2>O que me trava?</h2><p><br></p>""",
+
+              # 6 – Domingo
+              f"""<p>🌱 <em>Crescimento não aparece nos espelhos, aparece nas anotações.</em> Compare você de hoje
+com você de seis meses atrás. O que mudou?</p>
+<h2>Evolução pessoal 📈</h2><p><br></p>
+<h2>Hábito que estou tentando criar ou largar</h2><p><br></p>
+<h2>Uma coisa que aprendi sobre mim mesmo(a) recentemente</h2><p><br></p>""",
+          ]
+
+          prompt  = PROMPTS[now.weekday()]
+          content = (
+              f"<h1>📓 {weekday}</h1>"
+              f"<p><strong>{date_str}</strong></p>"
+              f"<hr>"
+              f"{prompt}"
+              f"<hr>"
+              f'<p><em>\u201cA vida n\u00e3o examinada n\u00e3o vale a pena ser vivida.\u201d \u2014 S\u00f3crates</em></p>'
           )
 
-          # Índice baseado no dia do ano para variar semanalmente
-          DAY_OF_YEAR=$(TZ="America/Fortaleza" date "+%j")
-          INDEX=$((DAY_OF_YEAR % ${#PROMPTS[@]}))
-          CHOSEN_PROMPT="${PROMPTS[$INDEX]}"
+          payload = {
+              "title":   title,
+              "type":    "note",
+              "source":  "github-actions-diario",
+              "version": 1,
+              "content": {
+                  "type": "html",
+                  "data": content,
+              },
+          }
 
-          # Montar o HTML completo da nota
-          NOTE_TITLE="${WEEKDAY_PT}, ${DATE_PT}"
+          with open("/tmp/note_payload.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f, ensure_ascii=False)
 
-          NOTE_CONTENT="<h1>📓 ${WEEKDAY_PT}</h1><p><strong>${DATE_PT}</strong></p><hr>${CHOSEN_PROMPT}<hr><p><em>\"A vida não examinada não vale a pena ser vivida.\" — Sócrates</em></p>"
+          # Exportar o título para o log do GitHub Actions
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"title={title}\n")
 
-          # Exportar para uso no próximo step
-          echo "title=${NOTE_TITLE}" >> "$GITHUB_OUTPUT"
-
-          # Usar delimitador para conteúdo multiline
-          echo "content<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$NOTE_CONTENT" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          print(f"✅ Payload gerado: {title}")
+          PYEOF
 
       - name: 📬 Enviar nota para o Notesnook
         run: |
-          TITLE="${{ steps.note.outputs.title }}"
-          CONTENT="${{ steps.note.outputs.content }}"
-
-          # Montar o JSON e enviar para a Inbox API
           HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
             -X POST https://inbox.notesnook.com/ \
             -H "Content-Type: application/json" \
             -H "Authorization: ${{ secrets.NOTESNOOK_INBOX_API_KEY }}" \
-            -d "$(jq -n \
-              --arg title "$TITLE" \
-              --arg content "$CONTENT" \
-              '{
-                title: $title,
-                type: "note",
-                source: "github-actions-diario",
-                version: 1,
-                content: {
-                  type: "html",
-                  data: $content
-                }
-              }'
-            )")
+            --data-binary @/tmp/note_payload.json)
 
           echo "Status HTTP: $HTTP_STATUS"
           echo "Resposta: $(cat /tmp/response.json)"
 
           if [ "$HTTP_STATUS" -eq 200 ]; then
-            echo "✅ Nota '${TITLE}' enviada com sucesso!"
+            echo "✅ Nota enviada com sucesso!"
           else
             echo "❌ Falha ao enviar nota. Status: $HTTP_STATUS"
             exit 1
