@@ -1,0 +1,50 @@
+name: "🌐 Wikipédia Aleatória"
+
+on:
+  schedule:
+    # 7:00 AM em Fortaleza (UTC-3) = 10:00 AM em UTC
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+
+jobs:
+  wikipedia:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Buscar artigo e enviar ao Notesnook
+        env:
+          NOTESNOOK_TOKEN: ${{ secrets.NOTESNOOK_DIARIO_TOKEN }}
+        run: |
+          export TZ="America/Fortaleza"
+
+          # Busca o resumo de um artigo aleatório na Wikipédia em PT
+          RESPONSE=$(curl -s https://pt.wikipedia.org/api/rest_v1/page/random/summary)
+          
+          WIKI_TITLE=$(echo "$RESPONSE" | jq -r '.title')
+          WIKI_EXTRACT=$(echo "$RESPONSE" | jq -r '.extract')
+          WIKI_URL=$(echo "$RESPONSE" | jq -r '.content_urls.desktop.page')
+
+          TITLE="💡 Wikipédia: $WIKI_TITLE"
+          
+          CONTENT="<h2>📖 Artigo Aleatório do Dia</h2><p><strong>$WIKI_TITLE</strong></p><p>$WIKI_EXTRACT</p><br><hr><p>🔗 <a href=\"$WIKI_URL\" target=\"_blank\">Clique aqui para ler o artigo completo na Wikipédia</a></p>"
+
+          HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST https://inbox.notesnook.com/ \
+            -H "Content-Type: application/json" \
+            -H "Authorization: $NOTESNOOK_TOKEN" \
+            -d "$(jq -n \
+              --arg title "$TITLE" \
+              --arg content "$CONTENT" \
+              '{
+                title: $title,
+                type: "note",
+                source: "github-actions-wikipedia",
+                version: 1,
+                content: { type: "html", data: $content }
+              }')")
+
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "✅ Artigo enviado com sucesso!"
+          else
+            echo "❌ Erro ao enviar. Status: $HTTP_STATUS"
+            exit 1
+          fi
