@@ -16,8 +16,8 @@ jobs:
         run: |
           export TZ="America/Fortaleza"
 
-          # Adicionado o User-Agent para a Wikipédia não bloquear a requisição
-          RESPONSE=$(curl -s -H "User-Agent: NotesnookBot/1.0 (GitHub Actions Automation)" https://pt.wikipedia.org/api/rest_v1/page/random/summary)
+          # Adicionado o parâmetro -L para o curl seguir o redirecionamento da Wikipédia
+          RESPONSE=$(curl -sL -H "User-Agent: NotesnookBot/1.0 (GitHub Actions Automation)" https://pt.wikipedia.org/api/rest_v1/page/random/summary)
           
           # Valida se o retorno é realmente um JSON válido antes de passar para o jq
           if ! echo "$RESPONSE" | jq empty 2>/dev/null; then
