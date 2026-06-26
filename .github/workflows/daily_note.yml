@@ -1,0 +1,124 @@
+name: 📓 Nota Diária no Notesnook
+
+on:
+  schedule:
+    # 7:00 AM BRT (America/Fortaleza) = 10:00 UTC
+    # Fortaleza não adota horário de verão, então é sempre UTC-3
+    - cron: "0 6 * * *"
+
+  # Permite executar manualmente pela aba Actions do GitHub
+  workflow_dispatch:
+
+jobs:
+  send-daily-note:
+    name: Enviar Nota Diária
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Clonar repositório
+        uses: actions/checkout@v4
+
+      - name: 📅 Preparar conteúdo da nota
+        id: note
+        run: |
+          # Data atual no fuso de Fortaleza (UTC-3)
+          DATE=$(TZ="America/Fortaleza" date "+%d de %B de %Y")
+          WEEKDAY=$(TZ="America/Fortaleza" date "+%A")
+
+          # Traduzir dia da semana para português
+          case "$WEEKDAY" in
+            Monday)    WEEKDAY_PT="Segunda-feira" ;;
+            Tuesday)   WEEKDAY_PT="Terça-feira"   ;;
+            Wednesday) WEEKDAY_PT="Quarta-feira"  ;;
+            Thursday)  WEEKDAY_PT="Quinta-feira"  ;;
+            Friday)    WEEKDAY_PT="Sexta-feira"   ;;
+            Saturday)  WEEKDAY_PT="Sábado"        ;;
+            Sunday)    WEEKDAY_PT="Domingo"       ;;
+            *)         WEEKDAY_PT="$WEEKDAY"      ;;
+          esac
+
+          # Traduzir mês para português
+          MONTH=$(TZ="America/Fortaleza" date "+%B")
+          case "$MONTH" in
+            January)   MONTH_PT="janeiro"   ;;
+            February)  MONTH_PT="fevereiro" ;;
+            March)     MONTH_PT="março"     ;;
+            April)     MONTH_PT="abril"     ;;
+            May)       MONTH_PT="maio"      ;;
+            June)      MONTH_PT="junho"     ;;
+            July)      MONTH_PT="julho"     ;;
+            August)    MONTH_PT="agosto"    ;;
+            September) MONTH_PT="setembro"  ;;
+            October)   MONTH_PT="outubro"   ;;
+            November)  MONTH_PT="novembro"  ;;
+            December)  MONTH_PT="dezembro"  ;;
+            *)         MONTH_PT="$MONTH"    ;;
+          esac
+
+          DAY=$(TZ="America/Fortaleza" date "+%d")
+          YEAR=$(TZ="America/Fortaleza" date "+%Y")
+          DATE_PT="${DAY} de ${MONTH_PT} de ${YEAR}"
+
+          # Obter o dia do ano (001-365) e remover zeros à esquerda para evitar erro de base octal no Bash
+          DAY_OF_YEAR=$(TZ="America/Fortaleza" date "+%j")
+          DAY_OF_YEAR=$((10#$DAY_OF_YEAR))
+
+          # Verificar se o arquivo prompts.json existe
+          if [ ! -f "prompts.json" ]; then
+            echo "❌ Erro: O arquivo prompts.json não foi encontrado na raiz."
+            exit 1
+          fi
+
+          # Calcular índice rotativo com base no total de prompts do arquivo JSON
+          TOTAL_PROMPTS=$(jq '. | length' prompts.json)
+          INDEX=$((DAY_OF_YEAR % TOTAL_PROMPTS))
+          
+          # Extrair o prompt correspondente do JSON
+          CHOSEN_PROMPT=$(jq -r ".[$INDEX]" prompts.json)
+
+          # Montar o HTML completo da nota
+          NOTE_TITLE="${WEEKDAY_PT}, ${DATE_PT}"
+          NOTE_CONTENT="<h1>📓 ${WEEKDAY_PT}</h1><p><strong>${DATE_PT}</strong></p><hr>${CHOSEN_PROMPT}<hr><p><em>\"A vida não examinada não vale a pena ser vivida.\" — Sócrates</em></p>"
+
+          # Exportar para uso no próximo step
+          echo "title=${NOTE_TITLE}" >> "$GITHUB_OUTPUT"
+
+          # Usar delimitador para conteúdo multiline com segurança
+          echo "content<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTE_CONTENT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: 📬 Enviar nota para o Notesnook
+        run: |
+          TITLE="${{ steps.note.outputs.title }}"
+          CONTENT="${{ steps.note.outputs.content }}"
+
+          # Montar o JSON e enviar para a Inbox API do Notesnook
+          HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST https://inbox.notesnook.com/ \
+            -H "Content-Type: application/json" \
+            -H "Authorization: ${{ secrets.NOTESNOOK_INBOX_API_KEY }}" \
+            -d "$(jq -n \
+              --arg title "$TITLE" \
+              --arg content "$CONTENT" \
+              '{
+                title: $title,
+                type: "note",
+                source: "github-actions-diario",
+                version: 1,
+                content: {
+                  type: "html",
+                  data: $content
+                }
+              }' \
+            )")
+
+          echo "Status HTTP: $HTTP_STATUS"
+          echo "Resposta: $(cat /tmp/response.json)"
+
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "✅ Nota '${TITLE}' enviada com sucesso!"
+          else
+            echo "❌ Falha ao enviar nota. Status: $HTTP_STATUS"
+            exit 1
+          fi
