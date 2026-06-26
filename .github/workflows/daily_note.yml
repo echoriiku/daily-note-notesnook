@@ -4,7 +4,7 @@ on:
   schedule:
     # 7:00 AM BRT (America/Fortaleza) = 10:00 UTC
     # Fortaleza não adota horário de verão, então é sempre UTC-3
-    - cron: "0 9 * * *"
+    - cron: "0 10 * * *"
 
   # Permite executar manualmente pela aba Actions do GitHub
   workflow_dispatch:
