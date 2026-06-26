@@ -1,0 +1,90 @@
+name: "🎂 Alerta de Aniversários"
+
+on:
+  schedule:
+    # 5:30 AM em Fortaleza (UTC-3) = 8:30 AM em UTC
+    - cron: '30 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  aniversarios:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar aniversariantes
+        env:
+          NOTESNOOK_TOKEN: ${{ secrets.NOTESNOOK_DIARIO_TOKEN }}
+        run: |
+          export TZ="America/Fortaleza"
+          HOJE=$(date +%d/%m)
+          AVISO_ANTECIPADO=$(date -d "+3 days" +%d/%m)
+          ANO_ATUAL=$(date +%Y)
+
+          # =========================================================
+          # CADASTRE OS ANIVERSÁRIOS AQUI (Formato: "DD/MM:Nome:Ano")
+          # Se não souber o ano de nascimento, coloque 0000
+          # =========================================================
+          LISTA=(
+            "08/04:Carolina Mariel:2023"
+            "02/06:Dayane Assis:1997"
+            "11/11:Naty Mâe Dayane:1968"
+            "07/04:Ilka Gomes:1971"
+            "07/04:Ilza Gomes:1971"
+            "28/07:Reginaldo Pai:1958"
+          )
+
+          ANIVERSARIANTES=""
+          for item in "${LISTA[@]}"; do
+            DATA=$(echo "$item" | cut -d':' -f1)
+            NOME=$(echo "$item" | cut -d':' -f2)
+            ANO_NASC=$(echo "$item" | cut -d':' -f3)
+
+            # Checa se o aniversário é HOJE
+            if [ "$DATA" == "$HOJE" ]; then
+              if [ "$ANO_NASC" != "0000" ]; then
+                IDADE=$((ANO_ATUAL - ANO_NASC))
+                ANIVERSARIANTES="${ANIVERSARIANTES}<li>🔴 <strong>HOJE:</strong> $NOME está completando <strong>$IDADE anos</strong>! 🎉</li>"
+              else
+                ANIVERSARIANTES="${ANIVERSARIANTES}<li>🔴 <strong>HOJE:</strong> $NOME está fazendo aniversário! 🎉</li>"
+              fi
+            
+            # Checa se o aniversário é DAQUI A 3 DIAS
+            elif [ "$DATA" == "$AVISO_ANTECIPADO" ]; then
+              if [ "$ANO_NASC" != "0000" ]; then
+                IDADE=$((ANO_ATUAL - ANO_NASC))
+                ANIVERSARIANTES="${ANIVERSARIANTES}<li>🟡 <strong>EM 3 DIAS ($DATA):</strong> $NOME vai fazer <strong>$IDADE anos</strong>! ⏳ <em>(Dá tempo de preparar a surpresa!)</em></li>"
+              else
+                ANIVERSARIANTES="${ANIVERSARIANTES}<li>🟡 <strong>EM 3 DIAS ($DATA):</strong> $NOME vai fazer aniversário! ⏳</li>"
+              fi
+            fi
+          done
+
+          # Se ninguém fizer aniversário hoje e nem em 3 dias, encerra sem mandar nota
+          if [ -z "$ANIVERSARIANTES" ]; then
+            echo "Nenhum aniversário hoje ou nos próximos 3 dias."
+            exit 0
+          fi
+
+          TITLE="🎂 Alerta de Aniversário!"
+          CONTENT="<h2>🎁 Cronograma de Aniversários</h2><p>Fique atento às datas importantes:</p><ul>$ANIVERSARIANTES</ul>"
+
+          HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST https://inbox.notesnook.com/ \
+            -H "Content-Type: application/json" \
+            -H "Authorization: $NOTESNOOK_TOKEN" \
+            -d "$(jq -n \
+              --arg title "$TITLE" \
+              --arg content "$CONTENT" \
+              '{
+                title: $title,
+                type: "note",
+                source: "github-actions-aniversarios",
+                version: 1,
+                content: { type: "html", data: $content }
+              }')")
+
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "✅ Alerta de aniversário enviado!"
+          else
+            echo "❌ Erro ao enviar. Status: $HTTP_STATUS"
+            exit 1
+          fi
