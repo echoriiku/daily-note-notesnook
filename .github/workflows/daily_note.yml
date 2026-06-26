@@ -27,7 +27,7 @@ jobs:
 
           TITLE="${DOWS[$DOW_INDEX]}, $DAY de ${MONTHS[$MONTH_INDEX]} de $YEAR"
 
-          CONTENT="<h1>📓 ${DOWS[$DOW_INDEX]}</h1><p><strong>$DAY de ${MONTHS[$MONTH_INDEX]} de $YEAR</strong></p><hr><p>🔍 <em>Examine a sua própria trajetória.</em> Se você fosse um observador externo da sua vida, o que veria agora? (Reflexão #178)</p><h2>Faísca criativa 💡</h2><p>Se a minha mente fosse um quarto, como ela estaria arrumada hoje?</p><p><br></p><h2>O que está indo bem?</h2><p>O que me dá energia e como posso acessar isso mais tarde?</p><p><br></p><hr><p><em>\"A vida não examinada não vale a pena ser vivida.\" — Sócrates</em></p>"
+          CONTENT="<h1>📓 ${DOWS[$DOW_INDEX]}</h1><p><strong>$DAY de ${MONTHS[$MONTH_INDEX]} de $YEAR</strong></p><hr><h2>🧠 Clareza Mental (Brain Dump)</h2><p>O que está ocupando espaço na minha mente agora? (Escreva livremente e sem filtros...)</p><p><br></p><p><br></p><h2>💡 O que funcionou bem hoje?</h2><p>Uma pequena vitória, um aprendizado ou algo pelo qual sou grato:</p><p><br></p><p><br></p><h2>🎯 Intenção & Foco</h2><p>Qual é a principal coisa que merece minha atenção ou o que posso melhorar nas próximas horas?</p><p><br></p><hr><p><em>\"A vida é o que nossos pensamentos a fazem.\" — Marco Aurélio</em></p>"
 
           # Envia o JSON para a Inbox API
           HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
