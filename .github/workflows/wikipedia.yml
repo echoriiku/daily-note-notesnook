@@ -1,4 +1,4 @@
-name: "🌐 Wikipédia Aleatória"
+name: "🌐 Wikipédia Aleatória Completa"
 
 on:
   schedule:
@@ -10,30 +10,44 @@ jobs:
   wikipedia:
     runs-on: ubuntu-latest
     steps:
-      - name: Buscar artigo e enviar ao Notesnook
+      - name: Buscar artigo completo e enviar ao Notesnook
         env:
           NOTESNOOK_TOKEN: ${{ secrets.NOTESNOOK_DIARIO_TOKEN }}
         run: |
           export TZ="America/Fortaleza"
 
-          # Adicionado o parâmetro -L para o curl seguir o redirecionamento da Wikipédia
-          RESPONSE=$(curl -sL -H "User-Agent: NotesnookBot/1.0 (GitHub Actions Automation)" https://pt.wikipedia.org/api/rest_v1/page/random/summary)
+          # 1. Sorteia o artigo para conseguir o título correto
+          RANDOM_RESP=$(curl -sL -H "User-Agent: NotesnookBot/1.0 (GitHub Actions Automation)" https://pt.wikipedia.org/api/rest_v1/page/random/summary)
           
-          # Valida se o retorno é realmente um JSON válido antes de passar para o jq
-          if ! echo "$RESPONSE" | jq empty 2>/dev/null; then
-            echo "❌ Erro: A Wikipédia não retornou um JSON válido. Resposta recebida:"
-            echo "$RESPONSE"
+          if ! echo "$RANDOM_RESP" | jq empty 2>/dev/null; then
+            echo "❌ Erro: A Wikipédia não retornou um JSON válido no sorteio."
             exit 1
           fi
 
-          WIKI_TITLE=$(echo "$RESPONSE" | jq -r '.title')
-          WIKI_EXTRACT=$(echo "$RESPONSE" | jq -r '.extract')
-          WIKI_URL=$(echo "$RESPONSE" | jq -r '.content_urls.desktop.page')
+          WIKI_TITLE=$(echo "$RANDOM_RESP" | jq -r '.title')
+          WIKI_URL=$(echo "$RANDOM_RESP" | jq -r '.content_urls.desktop.page')
+
+          # Codifica o título obtido para o formato de URL (處理 espaços e acentos)
+          ENCODED_TITLE=$(jq -nr --arg t "$WIKI_TITLE" '$t | @uri')
+
+          # 2. Busca o HTML completo do corpo do artigo usando a API de Parse da Wikipédia
+          # O parâmetro 'disableeditsection=1' esconde aqueles links de "[editar]" do meio do texto
+          FULL_RESP=$(curl -sL -H "User-Agent: NotesnookBot/1.0 (GitHub Actions Automation)" "https://pt.wikipedia.org/w/api.php?action=parse&page=${ENCODED_TITLE}&format=json&prop=text&disableeditsection=1")
+          
+          WIKI_HTML=$(echo "$FULL_RESP" | jq -r '.parse.text["*"]')
+
+          # Caso o artigo seja uma página de desambiguação ou dê erro no HTML, usa o resumo como plano de emergência
+          if [ "$WIKI_HTML" == "null" ] || [ -z "$WIKI_HTML" ]; then
+            echo "⚠️ Não foi possível puxar o HTML completo. Usando o resumo."
+            WIKI_HTML=$(echo "$RANDOM_RESP" | jq -r '.extract')
+          fi
 
           TITLE="💡 Wikipédia: $WIKI_TITLE"
           
-          CONTENT="<h2>📖 Artigo Aleatório do Dia</h2><p><strong>$WIKI_TITLE</strong></p><p>$WIKI_EXTRACT</p><br><hr><p>🔗 <a href=\"$WIKI_URL\" target=\"_blank\">Clique aqui para ler o artigo completo na Wikipédia</a></p>"
+          # Monta o conteúdo injetando todo o HTML da Wikipédia dentro de uma div
+          CONTENT="<h2>📖 Artigo: $WIKI_TITLE</h2><p>🔗 <a href=\"$WIKI_URL\" target=\"_blank\">Ver original na Wikipédia</a></p><hr><div>$WIKI_HTML</div>"
 
+          # 3. Envia o blocão de dados para a Inbox API do Notesnook
           HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
             -X POST https://inbox.notesnook.com/ \
             -H "Content-Type: application/json" \
@@ -50,7 +64,7 @@ jobs:
               }')")
 
           if [ "$HTTP_STATUS" -eq 200 ]; then
-            echo "✅ Artigo enviado com sucesso!"
+            echo "✅ Artigo completo de '${WIKI_TITLE}' enviado com sucesso!"
           else
             echo "❌ Erro ao enviar para o Notesnook. Status: $HTTP_STATUS"
             exit 1
